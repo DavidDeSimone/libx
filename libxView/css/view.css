@@ -1,0 +1,74 @@
+/* Style for central block containers */
+.centralCont {
+
+	width: 940px;
+	height: 610px;
+	text-align: center;
+	margin-left: auto;
+	margin-right: auto;
+
+}
+
+/* Styles for the statistics Window */
+#stats {
+
+width: 150px;
+height: 100%;
+float: left;
+
+}
+
+/* Styles for the control panel window */
+#controls {
+
+width: 150px;
+height: 100%;
+float: left;
+
+}
+
+.sidePanel {
+
+border: groove 6px;
+
+}
+
+#mainGraph {
+
+width: 600px;
+height: 100%;
+float: left;
+border: groove 6px;
+
+}
+
+#filterView {
+
+width: 300px;
+height: 100%;
+border: groove 6px;
+float: left;
+
+}
+
+#cardView {
+
+width: 925px;
+height: 100%;
+border: groove 6px;
+float: left;
+
+}
+
+#relatedTitle {
+
+font-size: 32px;
+
+}
+
+#mainTitle {
+
+font-size: 48px;
+
+}
+
