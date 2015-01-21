@@ -5,13 +5,25 @@
 <body>
 
 <link rel="stylesheet" type="text/css" href="../css/view.css">
+<!-- Dynamic Links 
 <script src="http://bl.ocks.org/syntagmatic/raw/3341641/render-queue.js"></script>
 <script src="http://d3js.org/d3.v2.js"></script>
 <script src="http://code.jquery.com/jquery-1.11.2.min.js"></script>
 
 <link rel="stylesheet" href="http://code.jquery.com/ui/1.11.2/themes/smoothness/jquery-ui.css">
 <script src="http://code.jquery.com/ui/1.11.2/jquery-ui.js"></script>
+-->
+<script src="../js/d3.v2.js"></script>
+<script src="../js/renderQueue.js"></script>
+<script src="../js/jquery-1.11.2.min.js"></script>
+<script src="../js/jquery-ui.min.js"></script>
+
+<link rel="stylesheet" href="../css/jquery-ui.css">
+
 <script src="../js/jquery.flip.min.js"></script>
+
+<!-- Library for plot display -->
+<script src="../js/jquery.flot.js"></script>
 
 <!-- Custom stylesheet for flipping cards -->
 <link rel="stylesheet" type="text/css" href="../css/FrameStyle.css">
@@ -27,8 +39,10 @@
 <div id="stats" class="sidePanel">
 <p id="numNodes">Number of vertices: </p>
 <p id="numEdges">Number of egdes: </p>
-<o id="graphStats"></p>
+<p id="graphStats"></p>
 <p> ... </p>
+<center><b>Edges and Vertices visible</b></center>
+<div id="freqPlot" class="plot"></div>
 </div>
 
 <!-- Panel containing the central graph for display -->
@@ -39,7 +53,14 @@
 <button id="resetSlider">Reset Slider</button>
 <button id="resetMainGraph">Reset Main Graph</button>
 <button id="screenShot">Take Screen Shot</button>
+<p/>
 <div id="slider"></div>
+<p/>
+<center><b>Density Measure</b></center>
+<div id="occPlot" class="plot"></div>
+<p/>
+<center><b>Algorithms</b></center>
+<button id="maxTree">Maximum Spanning Tree</button>
 </div>
 
 </div>
@@ -204,6 +225,20 @@ var HEIGHT = $('#mainGraph').height();
 var NUM_NODES = 10000;
 var NUM_EDGES = 100000;
 
+/* Variables for the time varying density plots */
+var renderStamp = 0;
+var veStamp = 0;
+var dPlot;
+var vePlot;
+var updateInterval = 5;
+
+/* List of plotted desity data points */
+var densityData = [];
+
+/* List of visible edges and vertices */
+var vData = [];
+var eData = [];
+
 var links = [];
 var nodes = [];
 
@@ -222,7 +257,7 @@ var cv = d3.select("#mainGraph")
              .attr("height", HEIGHT);
 
 var canvas = cv
-            .call(d3.behavior.zoom().x(x).y(y).scaleExtent([1,8]).on("zoom", zoom))
+            .call(d3.behavior.zoom().x(x).y(y).scaleExtent([1,12]).on("zoom", zoom))
              .node()
              .getContext("2d");
 
@@ -271,6 +306,16 @@ function generateLinks(nodes, num) {
    
    setNeighbors(links);
    return links;
+};
+
+function generatePlotPoints(num, pRange) {
+  var points = [];
+
+  for(i = 0; i < 99; i += 0.5) {
+    points.push([i, Math.sin(i)]);
+  }
+
+  return points;
 };
 
 function setNeighbors(links) {
@@ -372,17 +417,25 @@ setVertexStats(nodes.length);
 setEdgeStats(links.length);
 setGraphStats(nodes, links);
 
+/* Sets the interactive plots */
+initDensityPlot();
+initVEPlot();
 
 /* Mouse motion listener for node mouse over events in the canvas */
 /* For zoom-in, coordiates are being translated via objects x and y */
 /* To determine correct position, apply x and y to the marked coordiantes */
 /* i.e. x(d.x) and y(d.y) for node d */
+
+/* Boolean to determine if we are currently hovering over a node */
 var onNode = false;
 cv.on("mousemove", function() {
   var evt = d3.mouse(this);
   
   console.log(evt[0] + " " + evt[1]);
+  /* Boolean  changed to show if we have recently moused over a node */
   localOnNode = false;
+
+  /* Temporary variable for the previous state of onNode */
   currentOnNode = onNode;
 
   var thresHold = 2;
@@ -406,6 +459,7 @@ cv.on("mousemove", function() {
       }
     }
 
+    /* If we mouse out, mark all nodes visible */
     onNode = localOnNode;
     if(!onNode) {
       for(i = 0; i < nodes.length; i++) {
@@ -414,9 +468,19 @@ cv.on("mousemove", function() {
       }
     }
 
+    /* If the value of onNode has changed from this function all */
+    /* Call a render, else dont waste the effort */
     if(currentOnNode !== onNode) {
       render(data);
     }
+
+});
+
+
+/* Click listener for mouse clicking events */
+cv.on("click", function() {
+  var evt = d3.mouse(this);
+  console.log(evt);
 
 });
 
@@ -474,9 +538,79 @@ function resetVisibility(nodesArr) {
   redner(data);
 };
 
+/* Button Listeners */
 $("#resetMainGraph").on("click", function() {
   resetVisibility(nodes);
 });
+
+$("#screenShot").on("click", function() {
+  //TODO Screenshots 
+});
+
+/* formsCycle method is currently not working
+  (sometimes infinite looping). Thus we comment out the max tree function
+*/
+$("#maxTree").on("click", function() {
+  showMaxTree(nodes, links);
+});
+
+function showMaxTree(nodesArr, linksArr) {
+  linksArr.sort(function(a, b) {
+    return a.value - b.value;
+  });
+
+  for(i = 0; i < linksArr.length; i++) {
+    linksArr[i].source.visible = false;
+    linksArr[i].target.visible = false;
+  }
+
+  for(i = 0; i < linksArr.length; i++) {
+    console.log('At item ' + i);
+    var edge = linksArr[i];
+    var marker = false;
+
+    edge.target.visible = true;
+    edge.source.visible = true;
+
+    if(!formsCycle(edge)) {
+      marker = true;
+    } else {
+      marker = false;
+    }
+      
+    edge.source.visible = marker;
+    edge.target.visible = marker;
+  }
+
+  render(data);
+};
+
+function formsCycle(edge) {
+  var queue = [];
+  var visited = [];
+  queue.push(edge.target);
+  queue.push(edge.source);
+
+  while(queue.length != 0) {
+    var item = queue.shift();
+    visited.push(item);
+
+    for(j = 0; j < item.neighbors.length; j++) {
+      var n = item.neighbors[j];
+
+      if(n.visible == true && $.inArray(n, visited) == false) {
+      if((n == edge.source && item != edge.target) || (n == edge.target && item != edge.source)) {
+        return true;
+      }
+  
+      queue.push(n);
+      }
+    }
+    console.log('Looping..');
+  }
+  return false;
+};
+
 
 function setVertexStats(numNodes) {
 	$('#numNodes').html('Number of nodes ' + numNodes);
@@ -506,6 +640,93 @@ function setGraphStats(nodesArr, linksArr) {
 	$("#graphStats").html('<p>Average Degree ' + avgDeg + '</p>' +
 		'<p>Average Edge Weight ' + avgEWeight + '</p>');
 };
+
+function initPlot(plotStr, data) {
+
+  var plot = $.plot("#" + plotStr, [data]);
+  return plot;
+
+};
+
+function initDensityPlot() {
+  if(dPlot == null) {
+    densityData.push([renderStamp, getVisibleDensity(nodes, links)]);
+    renderStamp++;
+    dPlot = initPlot('occPlot', densityData);
+    updateDensityPlot();
+  } else {
+    console.log("Density plot already initalized");
+  }
+};
+
+function updateDensityPlot() {
+  densityData.push([renderStamp, getVisibleDensity(nodes, links)]);
+  renderStamp++;
+  dPlot.setData([densityData]);
+  dPlot.setupGrid();
+  dPlot.draw();
+
+  setTimeout(updateDensityPlot, updateInterval);
+};
+
+function initVEPlot() {
+  if(vePlot == null) {
+    var countArr = getVisibleCount(nodes, links);
+    vData.push([veStamp, countArr[0]]);
+    eData.push([veStamp, countArr[1]]);
+    veStamp++;
+    vePlot = initPlot('freqPlot', vData, eData);
+    updateVEPlot();
+  } else {
+    console.log("VE Plot already initalized");
+  }
+
+};
+
+function updateVEPlot() {
+  var countArr = getVisibleCount(nodes, links);
+  vData.push([veStamp, countArr[0]]);
+  eData.push([veStamp, countArr[1]]);
+  veStamp++;
+  vePlot.setData([vData, eData]);
+  vePlot.setupGrid();
+  vePlot.draw();
+
+  setTimeout(updateVEPlot, updateInterval);
+};
+
+function getVisibleCount(nodes, edges) {
+  var nCount = 0, eCount = 0;
+
+  for(i = 0; i < nodes.length; i++) {
+    var node = nodes[i];
+    if(node.visible) {
+      nCount++;
+    }
+  }
+
+  for(j = 0; j < edges.length; j++) {
+    var edge = edges[j];
+    if(edge.source.visible && edge.target.visible) {
+      eCount++;
+    }
+
+  }
+
+  return [nCount, eCount];
+};
+
+function getVisibleDensity(nodes, edges) {
+  var countArr = getVisibleCount(nodes, edges);
+  var nCount = countArr[0];
+  var eCount = countArr[1];
+
+  if(eCount == 0) {
+    return 0;
+  }
+
+  return nCount / eCount;
+}; 
 
 
 
