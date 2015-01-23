@@ -66,7 +66,18 @@
 <button id="maxTree">Maximum Spanning Tree</button>
 </div>
 
+</div> <!-- End of upper container -->
+
+<div class="buffer"></div>
+
+<div id="midContainer" class="midCont">
+<select>
+  <option>Filter1</option>
+  <option>Filter2</option>
+</select>
 </div>
+
+
 
 <!-- Center binder container for lower divs -->
 <div id="lowerCont" class="centralCont">
@@ -484,6 +495,7 @@ cv.on("mousemove", function() {
         var k = d.neighbors[j];
         showLabel(canvas, k, x, y);
         k.visible = true;
+        k.pinned = true;
       }
 
      /* We loop over the remaining nodes, marking 
@@ -528,7 +540,7 @@ cv.on("mousemove", function() {
 /* Click listener for mouse clicking events */
 cv.on("click", function() {
   var evt = d3.mouse(this);
-  var thresHold = 2;
+  var thresHold = 3;
 
   for(var i = 0; i < nodes.length; i++) {
     var d = nodes[i];
@@ -621,7 +633,7 @@ function resetVisibility(nodesArr) {
     nodesArr[i].visible = true;
     nodesArr[i].pinned = false;
   }
-  redner(data);
+  render(data);
 };
 
 /* Button Listeners */

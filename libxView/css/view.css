@@ -8,6 +8,31 @@ margin-left: auto;
 margin-right: auto;
 
 }
+.buffer {
+
+width: 940px;
+height: 15px;
+text-align: center;
+margin-left: auto;
+margin-right: auto;
+
+}
+
+.midCont {
+
+width: 930px;
+height: 50px;
+text-align: center;
+margin-left: auto;
+margin-right: auto;
+
+}
+
+#midContainer {
+
+border: groove 6px;
+
+}
 
 /* Styles for the statistics Window */
 #stats {
