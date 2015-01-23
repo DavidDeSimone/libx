@@ -82,6 +82,8 @@
 <!-- Center binder container for lower divs -->
 <div id="lowerCont" class="centralCont">
 
+<div id="sideView" class="secondCanvas"></div>
+
 <!-- Panel containing the cards -->
 <div id="cardView" class="cardPanel">
 <center id="relatedTitle"><b>Related Cards<b></center>
@@ -569,6 +571,11 @@ function withInRadius(node, xc, yc, xTransform, yTransform, threshHold) {
 
 function nodeCallBack(node) {
   //Do Node callback stuffs here
+  //Create induced subgraph from node and neighbors passed, 
+  //show in side view
+
+
+
 };
 
 function showLabel(canv, node, xTransform, yTransform) {

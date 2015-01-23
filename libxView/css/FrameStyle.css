@@ -2,8 +2,8 @@
  .f1_container {
   position: relative;
   margin: 10px 5px;
-  width: 220px;
-  height: 220px;
+  width: 150px;
+  height: 195px;
   border: 38px double;
   z-index: 1;
   float: left;
