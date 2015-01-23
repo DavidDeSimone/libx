@@ -25,6 +25,9 @@
 <!-- Library for plot display -->
 <script src="../js/jquery.flot.js"></script>
 
+<!-- Library for UnionFind DataStructure -->
+<script src="../js/union-find.js"></script>
+
 <!-- Custom stylesheet for flipping cards -->
 <link rel="stylesheet" type="text/css" href="../css/FrameStyle.css">
 
@@ -222,8 +225,8 @@
 var WIDTH = $('#mainGraph').width();
 var HEIGHT = $('#mainGraph').height();
 
-var NUM_NODES = 10000;
-var NUM_EDGES = 100000;
+var NUM_NODES = 25;
+var NUM_EDGES = 100;
 
 /* Variables for the time varying density plots */
 var renderStamp = 0;
@@ -238,6 +241,12 @@ var densityData = [];
 /* List of visible edges and vertices */
 var vData = [];
 var eData = [];
+
+/* Global varible used to denote if the user is exploring data by pinning verticies 
+ * to the view. If this is the case, we will not render on mousemouse events
+ */
+var graphPinned = false;
+var pinnedStack = [];
 
 var links = [];
 var nodes = [];
@@ -283,9 +292,12 @@ function generateNodes(num) {
        y: Math.random() * HEIGHT,
        r: Math.random() * 10 + 3,
        value: Math.random() * 10, 
+       id: i,
        color: getColor(Math.random()),
+       label: 'Hello World!', 
        neighbors: [],
        visible: true,
+       pinned: false,
        type: "node"
      };
    });
@@ -300,6 +312,7 @@ function generateLinks(nodes, num) {
          target: nodes[Math.floor(Math.random() * nodes.length)],
          color: getColor(Math.random()),
          value: Math.random(),
+         visible: true,
          type: "link"
        };
    });
@@ -308,21 +321,11 @@ function generateLinks(nodes, num) {
    return links;
 };
 
-function generatePlotPoints(num, pRange) {
-  var points = [];
-
-  for(i = 0; i < 99; i += 0.5) {
-    points.push([i, Math.sin(i)]);
-  }
-
-  return points;
-};
-
 function setNeighbors(links) {
   for(i = 0; i < links.length; i++) {
-    l = links[i];
-    n1 = l.source;
-    n2 = l.target;
+    var l = links[i];
+    var n1 = l.source;
+    var n2 = l.target;
 
     n1.neighbors.push(n2);
     n2.neighbors.push(n1);
@@ -330,10 +333,16 @@ function setNeighbors(links) {
 };
 
 var clear_canvas = function() {
-        canvas.clearRect(0,0,WIDTH, HEIGHT);
+    canvas.clearRect(0,0,WIDTH, HEIGHT);
 };
 
 function renderNode(d) {
+  if(graphPinned) {
+    if(!d.pinned) {
+      return;
+    }
+  }
+
   if(!d.visible) {
     return;
   } 
@@ -349,6 +358,16 @@ function renderNode(d) {
 };
 
 function renderEdge(e) {
+  if(graphPinned) {
+    if(e.source.pinned === false || e.target.pinned === false) {
+      return;
+    }
+  }
+
+  if(!e.visible) {
+    return;
+  }
+
   if(e.source.visible === false || e.target.visible === false) {
     return;
   }
@@ -369,17 +388,15 @@ function renderEdge(e) {
 };
 
 function renderData(o) {
-   if(o.type === "node") {
-     renderNode(o);
-   } else
-   if(o.type === "link") {
-      renderEdge(o);
-   } else {
+  if(o.type === "node") {
+    renderNode(o);
+  } else
+  if(o.type === "link") {
+    renderEdge(o);
+  } else {
     console.log("Error!");
-   }
-
-
-}
+  }
+};
 
 function FDL(nodesArr, linksArr) {
   var force = d3.layout.force()
@@ -428,36 +445,67 @@ initVEPlot();
 
 /* Boolean to determine if we are currently hovering over a node */
 var onNode = false;
+
 cv.on("mousemove", function() {
   var evt = d3.mouse(this);
   
-  console.log(evt[0] + " " + evt[1]);
   /* Boolean  changed to show if we have recently moused over a node */
-  localOnNode = false;
+  var localOnNode = false;
 
   /* Temporary variable for the previous state of onNode */
-  currentOnNode = onNode;
+  var currentOnNode = onNode;
 
-  var thresHold = 2;
-  
+  var thresHold = 3;
+  var examine = true;
   for(i = 0; i < nodes.length; i++) {
-    d = nodes[i];
-    
-    if(Math.abs(x(d.x) - evt[0]) < thresHold && Math.abs(y(d.y) - evt[1]) < thresHold) {
+    var d = nodes[i];
+    d.visible = false;
+
+    /* If we are in 'pinning' mode, i.e. the user has clicked on a node */
+    /* We don't want to re-render on mouse movement of invisible non pinned nodes */
+    var skip = false;
+    if(graphPinned) {
+      if(!d.pinned) {
+        skip = true;
+      }
+    }
+
+
+  if(!skip) {
+    /* If the mouse cursor is within radius, highlight the the node and it's neighbors */
+    if(withInRadius(d, evt[0], evt[1], x, y, thresHold)) {
       localOnNode = true;
       d.visible = true;
       console.log(d);
       nodeCallBack(d);
+      showLabel(canvas, d, x, y);
     
       for(j = 0; j < d.neighbors.length; j++) {
-        k = d.neighbors[j];
+        var k = d.neighbors[j];
+        showLabel(canvas, k, x, y);
         k.visible = true;
-        console.log(k);
+      }
+
+     /* We loop over the remaining nodes, marking 
+      * non-neighbors as non-visible 
+      */
+      i++;
+      while(i < nodes.length) {
+        var m = nodes[i];
+
+        if(!inArr(d.neighbors, m)) {
+          m.visible = false;
         }
-      } else { 
-        d.visible = false;
+
+        i++;
+      }
+
+        /* After we have moused over a node, we can break for this loop */
+        break;
+
       }
     }
+  }
 
     /* If we mouse out, mark all nodes visible */
     onNode = localOnNode;
@@ -480,12 +528,48 @@ cv.on("mousemove", function() {
 /* Click listener for mouse clicking events */
 cv.on("click", function() {
   var evt = d3.mouse(this);
-  console.log(evt);
+  var thresHold = 2;
 
+  for(var i = 0; i < nodes.length; i++) {
+    var d = nodes[i];
+
+    /* If the translated coordinates are within a a circular radius of the click event */
+    if(withInRadius(d, evt[0], evt[1], x, y, thresHold)) {
+      graphPinned = true;
+      d.pinned = true;
+      d.visible = true;
+      pinnedStack.push(d);
+
+      for(var j = 0; j < d.neighbors.length; j++) {
+        var n = d.neighbors[j];
+        n.pinned = true;
+        n.visible = true;
+      }
+
+      break;
+    }
+  }
 });
+
+function withInRadius(node, xc, yc, xTransform, yTransform, threshHold) {
+  return (Math.abs((xTransform(node.x)  + node.r / 2) - xc) < threshHold && Math.abs((yTransform(node.y) + node.r / 2) - yc) < threshHold);
+};
 
 function nodeCallBack(node) {
   //Do Node callback stuffs here
+};
+
+function showLabel(canv, node, xTransform, yTransform) {
+  canv.fillText(node.label, xTransform(node.x), yTransform(node.y));
+};
+
+function inArr(arr, obj) {
+  for(var i = 0; i < arr.length; i++) {
+    if(arr[i] === obj) {
+      return true;
+    }
+  }
+  return false;
 };
 
 /* Translation occurs during canvas rendering. */
@@ -532,8 +616,10 @@ function setSlider(nodesArr) {
 };
 
 function resetVisibility(nodesArr) {
+  graphPinned = false;
   for(i = 0; i < nodesArr.length; i++) {
     nodesArr[i].visible = true;
+    nodesArr[i].pinned = false;
   }
   redner(data);
 };
@@ -559,58 +645,24 @@ function showMaxTree(nodesArr, linksArr) {
     return a.value - b.value;
   });
 
-  for(i = 0; i < linksArr.length; i++) {
-    linksArr[i].source.visible = false;
-    linksArr[i].target.visible = false;
+  var unionFind = new UnionFind(nodesArr);
+  for(var i = 0; i < linksArr.length; i++) {
+    var e = linksArr[i];
+
+    e.visible = false;
   }
 
-  for(i = 0; i < linksArr.length; i++) {
-    console.log('At item ' + i);
-    var edge = linksArr[i];
-    var marker = false;
+  for(var j = 0; j < linksArr.length; j++) {
+    var e = linksArr[j];
 
-    edge.target.visible = true;
-    edge.source.visible = true;
-
-    if(!formsCycle(edge)) {
-      marker = true;
-    } else {
-      marker = false;
+    if(!unionFind.inSameGroup(e.source.id, e.target.id)) {
+      e.visible = true;
+      unionFind.union(e.source.id, e.target.id);
     }
-      
-    edge.source.visible = marker;
-    edge.target.visible = marker;
   }
 
   render(data);
 };
-
-function formsCycle(edge) {
-  var queue = [];
-  var visited = [];
-  queue.push(edge.target);
-  queue.push(edge.source);
-
-  while(queue.length != 0) {
-    var item = queue.shift();
-    visited.push(item);
-
-    for(j = 0; j < item.neighbors.length; j++) {
-      var n = item.neighbors[j];
-
-      if(n.visible == true && $.inArray(n, visited) == false) {
-      if((n == edge.source && item != edge.target) || (n == edge.target && item != edge.source)) {
-        return true;
-      }
-  
-      queue.push(n);
-      }
-    }
-    console.log('Looping..');
-  }
-  return false;
-};
-
 
 function setVertexStats(numNodes) {
 	$('#numNodes').html('Number of nodes ' + numNodes);
