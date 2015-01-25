@@ -22,6 +22,11 @@ public class JSONSerializer {
 			FileOutputStream writer = new FileOutputStream(new File(saveAs));
 		
 			//TODO Serialize Graph in JSON format
+			//For each card, form a vertex with atts
+			//for each pair of vertices, calculate comparison, form link
+			//serialize cards
+			//serialize final json in the form [nodes, links, cards]
+			//write to disk
 		
 		
 			writer.close();

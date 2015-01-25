@@ -56,6 +56,8 @@
 <button id="resetSlider">Reset Slider</button>
 <button id="resetMainGraph">Reset Main Graph</button>
 <button id="screenShot">Take Screen Shot</button>
+<button id="force">Apply Force</button>
+<button id="iterForce">Iterative Force</button>
 <p/>
 <div id="slider"></div>
 <p id="dynamicStats"></p>
@@ -64,8 +66,7 @@
 <div id="occPlot" class="plot"></div>
 <p/>
 <center><b>Algorithms</b></center>
-<button id="maxTree">Maximum Spanning Tree (Static)</button>
-<button id="maxTreeFDL">Maximum Spanning Tree (Force Directed Layout)</button>
+<button id="maxTree">Maximum Spanning Tree</button>
 </div>
 
 </div> <!-- End of upper container -->
@@ -240,8 +241,8 @@
 var WIDTH = $('#mainGraph').width();
 var HEIGHT = $('#mainGraph').height();
 
-var NUM_NODES = 25;
-var NUM_EDGES = 100;
+var NUM_NODES = 2500;
+var NUM_EDGES = 25000;
 
 /* Variables for the time varying density plots */
 var renderStamp = 0;
@@ -310,7 +311,7 @@ function generateNodes(num) {
        value: Math.random() * 10, 
        id: i,
        color: getColor(Math.random()),
-       label: 'Hello World!', 
+       label: Math.random().toString(36).replace(/[^a-h]+/g, '').substr(0, 8), //Generate random hex string 
        neighbors: [],
        visible: true,
        pinned: false,
@@ -416,9 +417,12 @@ function renderData(o) {
 
 function FDL(nodesArr, linksArr) {
   var force = d3.layout.force()
-              .charge(-40)
+              .charge(-120)
               .linkDistance(5)
               .gravity(0.06)
+              .linkStrength(function(link) {
+                return 2 * link.value;
+              })
               .size([WIDTH, HEIGHT]);
 
        force.nodes(nodesArr)
@@ -464,7 +468,7 @@ var onNode = false;
 
 cv.on("mousemove", function() {
   var evt = d3.mouse(this);
-  
+
   /* Boolean  changed to show if we have recently moused over a node */
   var localOnNode = false;
 
@@ -535,7 +539,7 @@ cv.on("mousemove", function() {
     /* If the value of onNode has changed from this function call */
     /* Call a render, else dont waste the effort */
     if(currentOnNode !== onNode) {
-      render(data);
+      renderVisible();
     }
 
 });
@@ -777,7 +781,7 @@ function inArr(arr, obj) {
 
 /* Translation occurs during canvas rendering. */
 function zoom() {
-  render(data);
+  renderVisible();
 };
 
 function getMax(nodesArr) {
@@ -805,15 +809,20 @@ function setSlider(nodesArr) {
       low = ui.values[0];
       high = ui.values[1];
 
-      for(i = 0; i < nodes.length; i++) {
-        var node = nodesArr[i];
+      for(i = 0; i < nodesArr.length; i++) {
+      var node = nodesArr[i];
+
         if(node.value >= low && node.value <= high) {
           node.visible = true;
+          node.pinned = true;
         } else {
+          node.pinned = false;
           node.visible = false;
         }
       }
-      render(data);
+
+      graphPinned = true;
+      renderVisible();
     }
   });
 };
@@ -845,12 +854,24 @@ $("#screenShot").on("click", function() {
   //TODO Screenshots 
 });
 
-$("#maxTreeFDL").on("click", function() {
-  showMaxTreeFDL(nodes, links);
-});
-
 $("#maxTree").on("click", function() {
   showMaxTree(nodes, links);
+});
+
+$("#force").on("click", function() {
+  applyForce();
+});
+
+var applied = false;
+var interval = null;
+$("#iterForce").on("click", function() {
+  if(!applied) {
+    interval = setInterval(applyForce, updateInterval);
+    applied = true;
+  } else {
+    applied = false;
+    clearInterval(interval);
+  }
 });
 
 $(".f1_card").on("mouseover", function(card) {
@@ -864,7 +885,44 @@ $(".f1_card").on("mouseout", function(card) {
   if(cardObj.node.hasOwnProperty('parent')) {
     deSelectNode(nodes, cardObj.node.parent);
   }
-})
+});
+
+function applyForce() {
+  var visNodes = [];
+  var visEdges = [];
+
+  for(var i = 0; i < links.length; i++) {
+    var link = links[i];
+
+    var gp = false;
+    if(graphPinned) {
+      if(!link.source.pinned || !link.target.pinned) {
+        gp = true;
+      }
+    }
+
+
+    if(link.visible &&
+      link.source.visible && link.target.visible) {
+      if(!gp) {
+        visEdges.push(link);
+
+        if(!nodeInArr(visNodes, link.source)) {
+          visNodes.push(link.source);
+        }
+
+        if(!nodeInArr(visNodes, link.target)) {
+          visNodes.push(link.target);
+        }
+      }
+    }
+
+
+  }
+
+  var res = FDL(visNodes, visEdges);
+  render(res);
+};
 
 function cardMouseOver(card) {
   var cardObj = getCard(card);
@@ -904,53 +962,6 @@ function showMaxTree(nodesArr, linksArr) {
   }
 
   render(data);
-};
-
-function showMaxTreeFDL(nodesArr, linksArr) {
-  linksArr.sort(function(a, b) {
-    return a.value - b.value;
-  });
-
-  var unionFind = new UnionFind(nodesArr);
-  var edgesToCopy = [];
-
-  var copiedEdges = [];
-  var copiedNodes = [];
-
-  var w = $('#sideView').width();
-  var h = $('#sideView').height();
-
-  for(var j = 0; j < linksArr.length; j++) {
-    var e = linksArr[j];
-
-    if(!unionFind.inSameGroup(e.source.id, e.target.id)) {
-      edgesToCopy.push(e);
-      unionFind.union(e.source.id, e.target.id);
-    }
-  }
-
-  for(var i = 0; i < edgesToCopy.length; i++) {
-    var e = edgesToCopy[i];
-
-    var cOne = nodeClone(e.source);
-    var cTwo = nodeClone(e.target);
-
-    var edge = edgeClone(e, cOne, cTwo);
-
-
-    if(!nodeInArr(copiedNodes, cOne)) {
-      copiedNodes.push(cOne);
-    }
-
-    if(!nodeInArr(copiedNodes, cTwo)) {
-      copiedNodes.push(cTwo);
-    }
-
-    copiedEdges.push(edge);
-  }
-
-  renderSideView(copiedNodes, copiedEdges, w, h);
-
 };
 
 function nodeInArr(nodesArr, node) {
@@ -1050,10 +1061,6 @@ function updateVEPlot() {
 
 function setDOMCount(numNodes, numEdges) {
   $('#dynamicStats').html('Visible Nodes: ' + numNodes + ', Visible Edges: ' + numEdges);
-
-
-
-
 };
 
 function getVisibleCount(nodes, edges) {
@@ -1108,6 +1115,32 @@ function readGraph(AJAXString) {
   return [nodes, edges];
 };
 
+
+function renderVisible() {
+  var renderSet = [];
+
+
+  for(var i = 0; i < links.length; i++) {
+        var link = links[i];
+
+        if(link.source.visible && link.target.visible) {
+
+          if(graphPinned) {
+            if(link.source.pinned && link.target.pinned) {
+              renderSet.push(link.source);
+              renderSet.push(link.target);
+              renderSet.push(link);
+            }
+          } else {
+            renderSet.push(link.source);
+            renderSet.push(link.target);
+            renderSet.push(link);
+          }
+        }
+      }
+
+      render(renderSet);
+};
 
 
 </script>
