@@ -40,7 +40,7 @@ public class JaccardCalc<T> {
 			return 0.0;
 		}
 		
-		int numMatched = 0;
+		double numMatched = 0;
 		
 		for(int k = 0; k < iterations; k++) {
 			int valueOne = getMinHash(listOne);
@@ -78,8 +78,6 @@ public class JaccardCalc<T> {
 	public void setIterations(int k) {
 		this.iterations = k;
 	}
-	
-	
-	
+
 	
 }

@@ -9,8 +9,8 @@ import edu.rutgers.dimacs.reader.DataComparator;
 
 public abstract class Card implements DataComparator {
 	
-	private HashMap<String, Object> cardAttrs;
-	private String cardID;
+	protected HashMap<String, Object> cardAttrs;
+	protected String cardID;
 	
 	public Card(HashMap<String, Object> cardAttrs, String ID) {
 		this.cardAttrs = cardAttrs;

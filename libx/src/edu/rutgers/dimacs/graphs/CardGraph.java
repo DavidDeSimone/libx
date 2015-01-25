@@ -52,7 +52,7 @@ public abstract class CardGraph extends DefaultGraph {
 	}
 	
 	public void saveAsJson(String saveAs) {
-		JSONSerializer json = new JSONSerializer(saveAs);
+		JSONSerializer json = new JSONSerializer(saveAs, cards);
 		json.save();
 	}
 }
