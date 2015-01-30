@@ -12,8 +12,6 @@ public class RailWayCard extends Card {
 		super(map, id);
 	}
 	
-	
-	
 	@Override
 	public double dataCompTo(Card otherCard) {
 		JaccardCalc<Pair> calc = new JaccardCalc<Pair>(getList(), otherCard.getList(), 512);

@@ -40,6 +40,13 @@
 
 <!-- Panel containing statistical measures and charts -->
 <div id="stats" class="sidePanel">
+
+<!-- Drop down menu used to select graph data -->
+<center>Displayed Graph:</center>
+<select id="graphSelect">
+  <option>Full</option>
+  <option>2</option>
+</select>
 <p id="numNodes">Number of vertices: </p>
 <p id="numEdges">Number of egdes: </p>
 <p id="graphStats"></p>
@@ -264,6 +271,9 @@ var eData = [];
 var graphPinned = false;
 var pinnedStack = [];
 
+/* Function used to color edges/nodes according to hotal metal scale */
+var hotMetalColor;
+
 var links = [];
 var nodes = [];
 
@@ -315,6 +325,7 @@ function generateNodes(num) {
        neighbors: [],
        visible: true,
        pinned: false,
+       shape: "cross",
        type: "node"
      };
    });
@@ -338,9 +349,9 @@ function generateLinks(nodes, num) {
    return links;
 };
 
-function setNeighbors(links) {
-  for(i = 0; i < links.length; i++) {
-    var l = links[i];
+function setNeighbors(linksArr) {
+  for(i = 0; i < linksArr.length; i++) {
+    var l = linksArr[i];
     var n1 = l.source;
     var n2 = l.target;
 
@@ -368,10 +379,45 @@ function renderNode(d) {
   var cy = y(d.y);
 
   canvas.fillStyle = d.color;
+  canvas.strokeStyle = d.color;
+
+  if(d.shape === 'square') {
+    renderSquare(canvas, cx, cy, d.r);
+  } else
+  if(d.shape === 'circle') {
+    renderCircle(canvas, cx, cy, d.r);
+  } else
+  if(d.shape === 'cross') {
+    renderCross(canvas, cx, cy, d.r);
+  } else {
+    console.log("Asked to render unknown shape");
+  }
+ 
+};
+
+function renderSquare(canvas, cx, cy, r) {
   canvas.beginPath();
-  canvas.fillRect(cx, cy, d.r, d.r);
+  canvas.fillRect(cx, cy, r, r);
   canvas.stroke();
   canvas.fill();
+};
+
+function renderCircle(canvas, cx, cy, r) {
+  canvas.beginPath();
+  canvas.arc(cx, cy, r, 0, 2 * Math.PI, false);
+  canvas.fill();
+  canvas.stroke();
+};
+
+function renderCross(canvas, cx, cy, r) {
+  canvas.beginPath();
+  canvas.moveTo(cx - r, cy - r);
+  canvas.lineTo(cx + r, cy + r);
+  canvas.stroke();
+
+  canvas.moveTo(cx + r, cy - r);
+  canvas.lineTo(cx - r, cy + r);
+  canvas.stroke();
 };
 
 function renderEdge(e) {
@@ -419,7 +465,8 @@ function FDL(nodesArr, linksArr) {
   var force = d3.layout.force()
               .charge(-120)
               .linkDistance(5)
-              .gravity(0.06)
+              //.gravity(0.06)
+              .gravity(5)
               .linkStrength(function(link) {
                 return 2 * link.value;
               })
@@ -435,15 +482,23 @@ function FDL(nodesArr, linksArr) {
        return nodesArr.concat(linksArr);
 };
 
-/* Sets the render queue for the canvas */
-var render = renderQueue(renderData).clear(clear_canvas);
 
-/* Generates the random nodes and edges for the graph */
-var nodes = generateNodes(NUM_NODES);
-var links = generateLinks(nodes, NUM_EDGES);
+var render;
+var nodes, links;
+var data;
+
+
+function setGraph(nodesArr, linksArr) {
+
+/* Sets the render queue for the canvas */
+render = renderQueue(renderData).clear(clear_canvas);
+
+nodes = nodesArr;
+links = linksArr;
+
 
 /* Runs D3's Force Directed Layout algorithm */
-var data = FDL(nodes, links);
+data = FDL(nodes, links);
 
 /* Renders the data via render queue */
 render(data);
@@ -457,6 +512,15 @@ setGraphStats(nodes, links);
 /* Sets the interactive plots */
 initDensityPlot();
 initVEPlot();
+
+};
+
+//Code for generating random graph for debugging
+var _n = generateNodes(NUM_NODES);
+var _e = generateLinks(_n, NUM_EDGES);
+setGraph(_n, _e);
+//END DEBUG
+
 
 /* Mouse motion listener for node mouse over events in the canvas */
 /* For zoom-in, coordiates are being translated via objects x and y */
@@ -1101,18 +1165,22 @@ function getVisibleDensity(nodes, edges) {
 function readGraph(AJAXString) {
   var nodes, edges;
 
-  $.getJSON(AJAXString, function(data) {
-    var n = data[0];
-    var e = data[1];
+  $.getJSON('./' + AJAXString, function(data) {
+    
+    var n = data.nodes;
+    var e = data.links;
 
-    nodes = n;
-    edges = e;
+    for(var i = 0; i < e.length; i++) {
+      e[i].source.neighbors = [];
+      e[i].target.neighbors = [];
+    }
+
+    setHotMetalEdges(e);
+    setNeighbors(e);
+
+    setGraph(n, e)
   });
 
-  console.log(nodes);
-  console.log(edges);
-
-  return [nodes, edges];
 };
 
 
@@ -1141,6 +1209,60 @@ function renderVisible() {
 
       render(renderSet);
 };
+
+
+$("#graphSelect").change(function() {
+  var selectedName = $(this).find('option:selected').html();
+  readGraph(selectedName);
+});
+
+$("#graphSelect").on("click", function() {
+  var selectedName = $(this).find('option:selected').html();
+  readGraph(selectedName);
+});
+
+function populateGraphOptions(optionList) {
+
+  $("#graphSelect").html('');
+
+  $.getJSON(optionList, function(data) {
+    for(var i = 0; i < data.length; i++) {
+      var datum = data[i];
+      var currHTML = $("#graphSelect").html();
+      $("#graphSelect").html(currHTML + "<option>" + datum + "</option>\n");
+    }
+
+   });
+};
+
+populateGraphOptions('./list.json');
+ 
+
+function setHotMetalEdges(linksArr) {
+  var max = getMax(linksArr);
+  setColorRange(max);
+
+  for(var i = 0; i < linksArr.length; i++) {
+    var e = linksArr[i];
+    e.color = hotMetalColor(e.value);
+  }
+};
+
+function setColorRange(maxval) {
+  var catagories = [];
+
+  for(i = maxval; i > 0; i--) {
+    catagories.push(i.toString());
+  }
+
+  hotMetalColor = d3.scale.ordinal()
+    .domain(catagories)
+    .range(d3.range(catagories.length).map(d3.scale.linear()
+      .domain([0, catagories.length - 1])
+      .range(["#ff0000", "grey"])
+      .interpolate(d3.interpolateHcl)));
+};
+
 
 
 </script>
