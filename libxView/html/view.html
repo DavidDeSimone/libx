@@ -59,7 +59,7 @@
 
 <!-- Panel containing the controls and filtering mechanisms -->
 <div id="controls" class="sidePanel">
-<button id="resetSlider">Reset Slider</button>
+<button id="saveGraph">Save Graph</button>
 <button id="resetMainGraph">Reset Main Graph</button>
 <button id="screenShot">Take Screen Shot</button>
 <button id="force">Apply Force</button>
@@ -68,7 +68,9 @@
 <p/>
 
 Gravity <textarea id="gravity" class="inputBox">Enter Gravity</textarea>
+<button id="gravitySet">Set</button>
 Charge <textarea id="charge" class="inputBox">Enter Charge</textarea>
+<button id="chargeSet">Set</button>
 
 <p/>
 <div id="slider"></div>
@@ -79,6 +81,7 @@ Charge <textarea id="charge" class="inputBox">Enter Charge</textarea>
 <p/>
 <center><b>Algorithms</b></center>
 <button id="maxTree">Maximum Spanning Tree</button>
+<button id="peeling">Peeling</button>
 </div>
 
 </div> <!-- End of upper container -->
@@ -303,7 +306,7 @@ var cv = d3.select("#mainGraph")
              .attr("height", HEIGHT);
 
 var canvas = cv
-            .call(d3.behavior.zoom().x(x).y(y).scaleExtent([0.1,12]).on("zoom", zoom))
+            .call(d3.behavior.zoom().x(x).y(y).scaleExtent([0.0001,12]).on("zoom", zoom))
              .node()
              .getContext("2d");
 
@@ -476,7 +479,6 @@ function FDL(nodesArr, linksArr) {
               .charge(CHARGE)
               .linkDistance(LINK_DISTANCE)
               .gravity(GRAVITY)
-              //.gravity(5)
               .linkStrength(function(link) {
                 return 2 * link.value;
               })
@@ -936,6 +938,58 @@ $("#force").on("click", function() {
   applyForce();
 });
 
+$("#gravitySet").on("click", function() {
+  GRAVITY = $("#gravity").val();
+});
+
+$("#chargeSet").on("click", function() {
+  CHARGE = $("#charge").val();
+});
+
+$("#saveGraph").on("click", function() {
+  localStorage.setItem("recentGraph", links);
+});
+
+$("#peeling").on("click", function() {
+  peelGraph(nodes, links);
+});
+
+function peelGraph(nodesArr, linksArr) {
+linksArr.sort(function(a, b) {
+  return b.value - a.value;
+});
+
+
+var current = linksArr[0].value;
+for(var i = 0; i < linksArr.length; i++) {
+  var edge = linksArr[i];
+
+  if(edge.visible && Math.abs(edge.value - current) > 0.1) {
+    //Run FDL
+    applyForce();
+
+    //Update Current
+    current = edge.value;
+
+    sleep(10000);
+  }
+
+}
+
+};
+
+function sleep(time) {
+  var start = new Date().getTime();
+  while(new Date().getTime() < start + time);
+
+};
+
+/* Assigns buckets based off of mean and std. dev */
+function assignBuckets(arr) {
+
+};
+
+
 /* Button listener for  the "Toggle Labels" button. When clicked, the button will show
  * labels for all visible node elements in the display.
  */
@@ -1110,7 +1164,15 @@ function setGraphStats(nodesArr, linksArr) {
 
 function initPlot(plotStr, data) {
 
-  var plot = $.plot("#" + plotStr, [data]);
+  var plot = $.plot("#" + plotStr, [data], { 
+    series: {
+      shadowSize: 0
+    }, 
+    xaxis: {
+      min: 0,
+      max: 300
+    }
+  });
   return plot;
 
 };
@@ -1127,9 +1189,16 @@ function initDensityPlot() {
 };
 
 function updateDensityPlot() {
+  var renderStamp = 300;
   densityData.push([renderStamp, getVisibleDensity(nodes, links)]);
-  renderStamp++;
-  dPlot.setData([densityData]);
+  
+  var newDensityData = [];
+  for(var i = 0; i < densityData.length; i++) {
+    newDensityData[i - 1] = densityData[i];
+    newDensityData[i - 1][0]--;
+  }
+
+  dPlot.setData([newDensityData]);
   dPlot.setupGrid();
   dPlot.draw();
 
@@ -1151,12 +1220,25 @@ function initVEPlot() {
 };
 
 function updateVEPlot() {
+  var veStamp = 300;
   var countArr = getVisibleCount(nodes, links);
   vData.push([veStamp, countArr[0]]);
   eData.push([veStamp, countArr[1]]);
-  veStamp++;
-  vePlot.setData([vData, eData]);
-  vePlot.setupGrid();
+
+  var newVData = [];
+  for(var i = 1; i < vData.length; i++) {
+    newVData[i - 1] = vData[i]
+    newVData[i - 1][0]--;
+  }
+
+  var newEData = [];
+  for(var j = 1; j < eData.length; j++) {
+    newEData[j - 1] = eData[j];
+    newEData[j - 1][0]--;
+  }
+
+  vePlot.setData([newVData, newEData]);
+  //vePlot.setupGrid();
   vePlot.draw();
 
   setDOMCount(countArr[0], countArr[1]);
@@ -1209,9 +1291,34 @@ function readGraph(AJAXString) {
     var n = data.nodes;
     var e = data.links;
 
+    /* Current Python script for generating these files has the ID's 
+     * all the same, with the label and ID being switched. this code is not
+     * needed if the script is fixed.
+    */
+    for(var i = 0; i < n.length; i++) {
+      var node = n[i];
+
+      node.label = node.id;
+      node.id = i;
+      if(node.shape == 'circle') {
+        console.log("circle");
+      } else {
+        console.log("cross");
+      }
+    }
+
     for(var i = 0; i < e.length; i++) {
-      e[i].source.neighbors = [];
-      e[i].target.neighbors = [];
+      var edge, tmp;
+      edge = e[i];
+
+      tmp = edge.source;
+      edge.source = n[tmp];
+
+      tmp = edge.target;
+      edge.target = n[tmp];
+
+      edge.source.neighbors = [];
+      edge.target.neighbors = [];
     }
 
     setHotMetalEdges(e);
@@ -1276,7 +1383,6 @@ function populateGraphOptions(optionList) {
 
 populateGraphOptions('./list.json');
  
-
 function setHotMetalEdges(linksArr) {
   var max = getMax(linksArr);
   setColorRange(max);
