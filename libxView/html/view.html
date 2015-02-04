@@ -37,7 +37,6 @@
 
 <!-- Central Container to center statistics, canvas and control panel -->
 <div id="upperContainer" class="centralCont">
-
 <!-- Panel containing statistical measures and charts -->
 <div id="stats" class="sidePanel">
 
@@ -65,6 +64,12 @@
 <button id="screenShot">Take Screen Shot</button>
 <button id="force">Apply Force</button>
 <button id="iterForce">Iterative Force</button>
+<button id="labels">Toggle Labels</button>
+<p/>
+
+Gravity <textarea id="gravity" class="inputBox">Enter Gravity</textarea>
+Charge <textarea id="charge" class="inputBox">Enter Charge</textarea>
+
 <p/>
 <div id="slider"></div>
 <p id="dynamicStats"></p>
@@ -277,6 +282,11 @@ var hotMetalColor;
 var links = [];
 var nodes = [];
 
+/* Variables that control the force directed layout paramers */
+var GRAVITY = 0.06;
+var LINK_DISTANCE = 5;
+var CHARGE = -120;
+
 /* Linear transformation scales used for "semantic" canvas zooming */
 var x = d3.scale.linear()
         .domain([0, WIDTH])
@@ -293,7 +303,7 @@ var cv = d3.select("#mainGraph")
              .attr("height", HEIGHT);
 
 var canvas = cv
-            .call(d3.behavior.zoom().x(x).y(y).scaleExtent([1,12]).on("zoom", zoom))
+            .call(d3.behavior.zoom().x(x).y(y).scaleExtent([0.1,12]).on("zoom", zoom))
              .node()
              .getContext("2d");
 
@@ -463,10 +473,10 @@ function renderData(o) {
 
 function FDL(nodesArr, linksArr) {
   var force = d3.layout.force()
-              .charge(-120)
-              .linkDistance(5)
-              //.gravity(0.06)
-              .gravity(5)
+              .charge(CHARGE)
+              .linkDistance(LINK_DISTANCE)
+              .gravity(GRAVITY)
+              //.gravity(5)
               .linkStrength(function(link) {
                 return 2 * link.value;
               })
@@ -926,6 +936,37 @@ $("#force").on("click", function() {
   applyForce();
 });
 
+/* Button listener for  the "Toggle Labels" button. When clicked, the button will show
+ * labels for all visible node elements in the display.
+ */
+var labelsShown = false;
+
+$("#labels").on("click", function() {
+  if(!labelsShown) {
+    for(var i = 0; i < nodes.length; i++) {
+      var d = nodes[i];
+
+      if(d.visible) {
+
+        var pinShow = true;
+        if(graphPinned) {
+          if(!d.pinned) {
+            pinShow = false;
+          }
+        }
+
+        if(pinShow) {
+          showLabel(canvas, d, x, y);
+        }
+      }
+    }
+    labelsShown = true;
+  } else {
+    renderVisible();
+    labelsShown = false;
+  }
+});
+
 var applied = false;
 var interval = null;
 $("#iterForce").on("click", function() {
@@ -1160,8 +1201,6 @@ function getVisibleDensity(nodes, edges) {
   return nCount / eCount;
 }; 
 
-
-
 function readGraph(AJAXString) {
   var nodes, edges;
 
@@ -1249,18 +1288,28 @@ function setHotMetalEdges(linksArr) {
 };
 
 function setColorRange(maxval) {
-  var catagories = [];
+  if(maxval === 1) {
 
-  for(i = maxval; i > 0; i--) {
-    catagories.push(i.toString());
+    hotMetalColor = function() {
+      return "grey";
+    }
+
+  } else {
+
+    var catagories = [];
+
+    for(i = maxval; i > 0; i--) {
+      catagories.push(i.toString());
+    }
+
+    hotMetalColor = d3.scale.ordinal()
+      .domain(catagories)
+      .range(d3.range(catagories.length).map(d3.scale.linear()
+        .domain([0, catagories.length - 1])
+        .range(["#ff0000", "grey"])
+        .interpolate(d3.interpolateHcl)));
   }
 
-  hotMetalColor = d3.scale.ordinal()
-    .domain(catagories)
-    .range(d3.range(catagories.length).map(d3.scale.linear()
-      .domain([0, catagories.length - 1])
-      .range(["#ff0000", "grey"])
-      .interpolate(d3.interpolateHcl)));
 };
 
 
