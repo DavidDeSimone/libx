@@ -50,7 +50,7 @@
 <p id="numEdges">Number of egdes: </p>
 <p id="graphStats"></p>
 <p> ... </p>
-<center><b>Edges and Vertices visible</b></center>
+<center><b>Graph Density</b></center>
 <div id="freqPlot" class="plot"></div>
 </div>
 
@@ -71,12 +71,14 @@ Gravity <textarea id="gravity" class="inputBox">Enter Gravity</textarea>
 <button id="gravitySet">Set</button>
 Charge <textarea id="charge" class="inputBox">Enter Charge</textarea>
 <button id="chargeSet">Set</button>
+Link Str <textarea id="linkstr" class="inputBox">Enter Link Str</textarea>
+<button id="linkStrSet">Set</button>
 
 <p/>
 <div id="slider"></div>
 <p id="dynamicStats"></p>
 <p/>
-<center><b>Density Measure</b></center>
+<center><b>Average Degree</b></center>
 <div id="occPlot" class="plot"></div>
 <p/>
 <center><b>Algorithms</b></center>
@@ -289,6 +291,7 @@ var nodes = [];
 var GRAVITY = 0.06;
 var LINK_DISTANCE = 5;
 var CHARGE = -120;
+var SCALE = 1;
 
 /* Linear transformation scales used for "semantic" canvas zooming */
 var x = d3.scale.linear()
@@ -475,12 +478,13 @@ function renderData(o) {
 };
 
 function FDL(nodesArr, linksArr) {
+  var cloujure = getMax(linksArr);
   var force = d3.layout.force()
               .charge(CHARGE)
               .linkDistance(LINK_DISTANCE)
               .gravity(GRAVITY)
               .linkStrength(function(link) {
-                return 2 * link.value;
+                return SCALE * (link.value / cloujure);
               })
               .size([WIDTH, HEIGHT]);
 
@@ -495,10 +499,9 @@ function FDL(nodesArr, linksArr) {
 };
 
 
-var render;
+var render = null;
 var nodes, links;
-var data;
-
+var data = null;
 
 function setGraph(nodesArr, linksArr) {
 
@@ -514,7 +517,7 @@ data = FDL(nodes, links);
 
 /* Renders the data via render queue */
 render(data);
-setSlider(nodes);
+setSlider(links);
 
 /* Sets the various stats in the statistics panel */
 setVertexStats(nodes.length);
@@ -872,8 +875,8 @@ function getMax(nodesArr) {
   return max;
 };
 
-function setSlider(nodesArr) {
-  var maxVal = getMax(nodesArr);
+function setSlider(linksArr) {
+  var maxVal = getMax(linksArr);
 
   $("#slider").slider({
     range: true,
@@ -885,23 +888,70 @@ function setSlider(nodesArr) {
       low = ui.values[0];
       high = ui.values[1];
 
-      for(i = 0; i < nodesArr.length; i++) {
-      var node = nodesArr[i];
+      for(i = 0; i < linksArr.length; i++) {
 
-        if(node.value >= low && node.value <= high) {
-          node.visible = true;
-          node.pinned = true;
-        } else {
-          node.pinned = false;
-          node.visible = false;
+        var link = linksArr[i];
+        
+
+          if(link.value >= low && link.value <= high) {
+            link.visible = true;
+            link.source.pinned = true;
+            link.target.pinned = true;
+          } else {
+            link.visible = false;
+          }
         }
-      }
 
-      graphPinned = true;
+      //graphPinned = true;
+
+      hideSingletons(linksArr);
       renderVisible();
     }
   });
 };
+
+function hideSingletons(linksArr) {
+  for(var j = 0; j < linksArr.length; j++) {
+     var edge = linksArr[j];
+
+    var source = edge.source;
+    var target = edge.target;
+
+    source.visCount = source.neighbors.length;
+    target.visCount = target.neighbors.length;
+  }
+
+
+  for(var i = 0; i < linksArr.length; i++) {
+    var edge = linksArr[i];
+
+    var source = edge.source;
+    var target = edge.target;
+
+    if(!edge.visible) {
+      source.visCount--;
+      target.visCount--;
+    }
+
+  }
+
+  for(var k = 0; k < linksArr.length; k++) {
+    var edge = linksArr[k];
+
+    var source = edge.source;
+    var target = edge.target;
+
+    if(source.visCount === 0) {
+      source.visible = false;
+    }
+
+    if(target.visCount === 0) {
+      target.visible = false;
+    }
+
+  }
+};
+
 
 function resetVisibility(linksArr) {
   graphPinned = false;
@@ -946,6 +996,10 @@ $("#chargeSet").on("click", function() {
   CHARGE = $("#charge").val();
 });
 
+$("#linkStrSet").on("click", function() {
+  SCALE = $("#linkstr").val();  
+});
+
 $("#saveGraph").on("click", function() {
   localStorage.setItem("recentGraph", links);
 });
@@ -970,19 +1024,12 @@ for(var i = 0; i < linksArr.length; i++) {
 
     //Update Current
     current = edge.value;
-
-    sleep(10000);
   }
 
 }
 
 };
 
-function sleep(time) {
-  var start = new Date().getTime();
-  while(new Date().getTime() < start + time);
-
-};
 
 /* Assigns buckets based off of mean and std. dev */
 function assignBuckets(arr) {
@@ -1205,25 +1252,43 @@ function updateDensityPlot() {
   setTimeout(updateDensityPlot, updateInterval);
 };
 
-function initVEPlot() {
-  if(vePlot == null) {
-    var countArr = getVisibleCount(nodes, links);
-    vData.push([veStamp, countArr[0]]);
-    eData.push([veStamp, countArr[1]]);
-    veStamp++;
-    vePlot = initPlot('freqPlot', vData, eData);
-    updateVEPlot();
-  } else {
-    console.log("VE Plot already initalized");
+function getRealDensity(nodesArr, linksArr) {
+
+
+  var vis_nodes = 0;
+  for(var i = 0; i < nodesArr.length; i++) {
+    if(nodesArr[i].visible) {
+      vis_nodes++;
+    }
   }
 
+  var max_edges = (vis_nodes * (vis_nodes - 1)) / 2;
+
+  var vis_edges = 0;
+  for(var i = 0; i < linksArr.length; i++) {
+    var edge = linksArr[i];
+
+    if(edge.source.visible && edge.target.visible) {
+      vis_edges++;
+    }
+  }
+
+  return vis_edges / max_edges;
+
+};
+
+function initVEPlot() {
+    var density = getRealDensity(nodes, links);
+    vData.push([veStamp, density]);
+    veStamp++;
+    vePlot = initPlot('freqPlot', vData);
+    updateVEPlot();
 };
 
 function updateVEPlot() {
   var veStamp = 300;
-  var countArr = getVisibleCount(nodes, links);
-  vData.push([veStamp, countArr[0]]);
-  eData.push([veStamp, countArr[1]]);
+  var density = getRealDensity(nodes, links);
+  vData.push([veStamp, density]);
 
   var newVData = [];
   for(var i = 1; i < vData.length; i++) {
@@ -1231,17 +1296,11 @@ function updateVEPlot() {
     newVData[i - 1][0]--;
   }
 
-  var newEData = [];
-  for(var j = 1; j < eData.length; j++) {
-    newEData[j - 1] = eData[j];
-    newEData[j - 1][0]--;
-  }
-
-  vePlot.setData([newVData, newEData]);
-  //vePlot.setupGrid();
+  vePlot.setData([newVData]);
+  vePlot.setupGrid();
   vePlot.draw();
 
-  setDOMCount(countArr[0], countArr[1]);
+ // setDOMCount(countArr[0], countArr[1]);
 
   setTimeout(updateVEPlot, updateInterval);
 };
@@ -1298,13 +1357,11 @@ function readGraph(AJAXString) {
     for(var i = 0; i < n.length; i++) {
       var node = n[i];
 
+      node.x = Math.random() * WIDTH;
+      node.y = Math.random() * HEIGHT;
       node.label = node.id;
       node.id = i;
-      if(node.shape == 'circle') {
-        console.log("circle");
-      } else {
-        console.log("cross");
-      }
+      node.neighbors = [];
     }
 
     for(var i = 0; i < e.length; i++) {
@@ -1316,15 +1373,12 @@ function readGraph(AJAXString) {
 
       tmp = edge.target;
       edge.target = n[tmp];
-
-      edge.source.neighbors = [];
-      edge.target.neighbors = [];
     }
 
     setHotMetalEdges(e);
     setNeighbors(e);
 
-    setGraph(n, e)
+    setGraph(n, e);
   });
 
 };
