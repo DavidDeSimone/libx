@@ -67,12 +67,14 @@
 <button id="labels">Toggle Labels</button>
 <p/>
 
+<div id="inputBoxes">
 Gravity <textarea id="gravity" class="inputBox">Enter Gravity</textarea>
 <button id="gravitySet">Set</button>
 Charge <textarea id="charge" class="inputBox">Enter Charge</textarea>
 <button id="chargeSet">Set</button>
 Link Str <textarea id="linkstr" class="inputBox">Enter Link Str</textarea>
 <button id="linkStrSet">Set</button>
+</div>
 
 <p/>
 <div id="slider"></div>
@@ -575,7 +577,8 @@ cv.on("mousemove", function() {
     if(withInRadius(d, evt[0], evt[1], x, y, thresHold)) {
       localOnNode = true;
       d.visible = true;
-      nodeCallBack(d);
+      //Used for rendering node nieghborhood in side Canvas
+      //nodeCallBack(d);
       showLabel(canvas, d, x, y);
     
       for(j = 0; j < d.neighbors.length; j++) {
@@ -892,15 +895,28 @@ function setSlider(linksArr) {
 
         var link = linksArr[i];
         
-
+        if(graphPinned) {
+          if(link.value >= low && link.value <= high) {
+            if(link.pinned) {
+              link.visible = true;
+              link.source.visible = true;
+              link.target.visible = true;
+            } else {
+              link.visible = false;
+            }
+          } else {
+            link.visible = false;
+          }
+        } else { //Else the graph is not pinned
           if(link.value >= low && link.value <= high) {
             link.visible = true;
-            link.source.pinned = true;
-            link.target.pinned = true;
+            link.source.visible = true;
+            link.target.visible = true;
           } else {
             link.visible = false;
           }
         }
+      }
 
       //graphPinned = true;
 
@@ -1145,16 +1161,16 @@ function getCard(card) {
   };
 }
 
-
+//TODO have this act on visible
 function showMaxTree(nodesArr, linksArr) {
+  graphPinned = true;
   linksArr.sort(function(a, b) {
-    return a.value - b.value;
+    return b.value - a.value;
   });
 
   var unionFind = new UnionFind(nodesArr);
   for(var i = 0; i < linksArr.length; i++) {
     var e = linksArr[i];
-
     e.visible = false;
   }
 
@@ -1163,6 +1179,9 @@ function showMaxTree(nodesArr, linksArr) {
 
     if(!unionFind.inSameGroup(e.source.id, e.target.id)) {
       e.visible = true;
+      e.pinned = true;
+      e.source.pinned = true;
+      e.target.pinned = true;
       unionFind.union(e.source.id, e.target.id);
     }
   }
